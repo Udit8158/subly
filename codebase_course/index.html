@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>jap-video-sub · Codebase Course</title>
+  <meta name="description" content="An interactive, gamified course that teaches the jap-video-sub codebase — ffmpeg, Whisper, OpenAI translation, the event contract, and the Electron desktop app — one real file at a time." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%23ff5a45'/%3E%3Ctext x='50' y='70' font-size='60' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='bold'%3E%E5%AD%97%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <div class="bg-mesh"></div>
+  <div class="bg-grid"></div>
+  <div class="bg-noise"></div>
+
+  <div class="app">
+    <aside class="sidebar" id="sidebar"><!-- rendered by app.js --></aside>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="menu-btn" id="menuBtn" aria-label="menu">☰</button>
+        <div class="crumb" id="crumb"></div>
+        <div class="topbar-right">
+          <a class="theme-link" href="v2/index.html" title="Switch to the blackboard theme">☾ dark</a>
+          <div class="top-prog"><div class="top-prog-fill" id="topProgFill"></div></div>
+          <div class="top-prog-num" id="topProgNum">0%</div>
+        </div>
+      </header>
+      <main id="view" class="view-host" style="transition:opacity .15s ease"><!-- rendered by app.js --></main>
+    </div>
+  </div>
+
+  <div id="toasts"></div>
+  <canvas id="confetti"></canvas>
+
+  <script src="js/content.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
