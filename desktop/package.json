@@ -10,7 +10,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "electron": "electron .",
-    "dev:electron": "concurrently -k \"vite\" \"wait-on tcp:5173 && cross-env SUBLY_DEV_URL=http://localhost:5173 electron .\"",
+    "dev:electron": "node scripts/dev-electron.mjs",
     "typecheck": "tsc --noEmit",
     "test:node": "node tests/buildArgs.test.mjs && node tests/keychain.test.mjs && node tests/bridge.test.mjs",
     "test:e2e": "playwright test",
