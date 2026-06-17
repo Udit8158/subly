@@ -26,6 +26,31 @@ export function RunningView({ state, onCancel }: Props) {
 
   const pct = overallPercent(state);
 
+  // The run was requested but the CLI hasn't emitted its first event yet. On a
+  // fresh install this stretch can be long (installing deps + downloading the
+  // ~3 GB model), so make it explicit rather than showing a dead "0%".
+  if (state.status === "starting") {
+    return (
+      <section className="running" data-testid="running">
+        <header className="running__head">
+          <div>
+            <p className="running__file mono">{basename(state.video ?? "")}</p>
+            <h2 className="running__stage" data-testid="running-stage">
+              Starting…
+            </h2>
+          </div>
+          <button className="btn btn--ghost" data-testid="cancel" onClick={onCancel}>
+            Cancel
+          </button>
+        </header>
+        <p className="running__hint">
+          Preparing the engine. The first run can take a few minutes while it sets
+          up and downloads the speech model (cached for next time).
+        </p>
+      </section>
+    );
+  }
+
   return (
     <section className="running" data-testid="running">
       <header className="running__head">

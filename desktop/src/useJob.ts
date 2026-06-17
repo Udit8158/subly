@@ -25,7 +25,10 @@ export interface ChunkState {
   translateTotal?: number;
 }
 
-export type JobStatus = "idle" | "running" | "done" | "error" | "cancelled";
+// "starting" = the run was requested but the CLI hasn't emitted its first event
+// yet. On a fresh install this can take a while (uv installs deps + downloads the
+// Whisper model), so it's a distinct state the UI can show feedback for.
+export type JobStatus = "idle" | "starting" | "running" | "done" | "error" | "cancelled";
 
 export interface JobState {
   status: JobStatus;
@@ -58,7 +61,14 @@ export const initialState: JobState = {
   events: [],
 };
 
-type Action = { kind: "event"; event: SublyEvent } | { kind: "reset" } | { kind: "cancelled" };
+type Action =
+  | { kind: "event"; event: SublyEvent }
+  | { kind: "reset" }
+  | { kind: "starting" }
+  | { kind: "cancelled" }
+  | { kind: "exited"; code: number | null };
+
+const TERMINAL: JobStatus[] = ["done", "error", "cancelled"];
 
 function patchChunk(
   chunks: ChunkState[],
@@ -70,7 +80,18 @@ function patchChunk(
 
 export function reducer(state: JobState, action: Action): JobState {
   if (action.kind === "reset") return { ...initialState };
+  if (action.kind === "starting") return { ...initialState, status: "starting" };
   if (action.kind === "cancelled") return { ...state, status: "cancelled" };
+  if (action.kind === "exited") {
+    // The process ended. If it already reached a terminal state (done/error/
+    // cancelled) keep it; otherwise it died without finishing → surface an error.
+    if (TERMINAL.includes(state.status)) return state;
+    return {
+      ...state,
+      status: "error",
+      error: state.error ?? `The run stopped unexpectedly (exit code ${action.code ?? "unknown"}).`,
+    };
+  }
 
   const e = action.event;
   const s = { ...state, events: [...state.events, e] };
@@ -244,12 +265,17 @@ export function useJob(source: EventSource) {
 
   const start = useCallback(
     (options: RunOptions) => {
-      dispatch({ kind: "reset" });
+      // Guard against double-starts: if a run is already in flight, ignore the
+      // request. Without this, rapid/extra clicks spawn multiple CLI processes
+      // (each loads the model + ffmpeg) and can overwhelm the machine.
+      if (handleRef.current) return;
+      dispatch({ kind: "starting" });
       handleRef.current = source.run(
         options,
         (event) => dispatch({ kind: "event", event }),
-        () => {
+        (code) => {
           handleRef.current = null;
+          dispatch({ kind: "exited", code });
         },
       );
     },

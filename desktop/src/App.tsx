@@ -44,10 +44,12 @@ export function App() {
     setFile(null);
   };
 
+  const isStarting = state.status === "starting";
   const isRunning = state.status === "running";
+  const isActive = isStarting || isRunning;
   const isDone = state.status === "done";
   const isError = state.status === "error";
-  const inSetup = !isRunning && !isDone;
+  const inSetup = !isActive && !isDone;
 
   return (
     <div className="app">
@@ -85,16 +87,16 @@ export function App() {
               <button
                 className="btn btn--accent btn--lg"
                 data-testid="generate"
-                disabled={!file}
+                disabled={!file || isActive}
                 onClick={generate}
               >
-                Generate subtitles
+                {isActive ? "Starting…" : "Generate subtitles"}
               </button>
             </div>
           </section>
         )}
 
-        {isRunning && <RunningView state={state} onCancel={reset} />}
+        {isActive && <RunningView state={state} onCancel={reset} />}
 
         {isDone && <DoneView state={state} onReset={reset} />}
       </main>
