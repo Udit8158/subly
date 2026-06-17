@@ -14,16 +14,43 @@
 import { app, BrowserWindow, ipcMain, dialog, shell } from "electron";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { getKey, setKey } from "./keychain.js";
 import { buildArgs } from "./buildArgs.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-// The Python CLI lives in the sibling `cli/` package (desktop/electron -> repo
-// root -> cli). This is the only place the desktop app knows where the engine is.
-const CLI_DIR = path.resolve(__dirname, "..", "..", "cli");
+// Where the Python CLI lives. In dev it's the sibling `cli/` package
+// (desktop/electron -> repo root -> cli). In the packaged app it's bundled
+// under Contents/Resources/cli (electron-builder `extraResources`).
+const CLI_DIR = app.isPackaged
+  ? path.join(process.resourcesPath, "cli")
+  : path.resolve(__dirname, "..", "..", "cli");
 const DEV_URL = process.env.SUBLY_DEV_URL;
+
+// A GUI app launched from Finder inherits a bare PATH, so tools installed by
+// Homebrew / uv / cargo won't be found. Prepend the usual install locations so
+// the spawned `uv` (and the `ffmpeg` the CLI shells out to) resolve correctly.
+const EXTRA_PATHS = [
+  "/opt/homebrew/bin",
+  "/usr/local/bin",
+  path.join(os.homedir(), ".local", "bin"),
+  path.join(os.homedir(), ".cargo", "bin"),
+];
+function augmentedPath() {
+  return [...EXTRA_PATHS, process.env.PATH || ""].filter(Boolean).join(path.delimiter);
+}
+function resolveBin(name) {
+  for (const dir of EXTRA_PATHS) {
+    const p = path.join(dir, name);
+    try {
+      fs.accessSync(p, fs.constants.X_OK);
+      return p;
+    } catch {}
+  }
+  return name; // fall back to PATH lookup with the augmented PATH
+}
 
 /** True if the repo .env already holds a usable OPENAI_API_KEY (dev fallback so
  * personal use doesn't get nagged for a key it already has). */
@@ -45,10 +72,15 @@ async function startRun(event, jobId, options) {
   // Inject the Keychain key into the child's environment. If none is stored, we
   // fall through to whatever the CLI finds itself (e.g. a .env in dev).
   const key = await getKey().catch(() => null);
-  const env = { ...process.env };
+  const env = { ...process.env, PATH: augmentedPath() };
   if (key) env.OPENAI_API_KEY = key;
+  if (app.isPackaged) {
+    // The bundled cli/ lives inside the read-only app bundle, so tell uv to put
+    // its virtualenv somewhere writable (created/synced on first run).
+    env.UV_PROJECT_ENVIRONMENT = path.join(app.getPath("userData"), "cli-venv");
+  }
 
-  const child = spawn("uv", buildArgs(options), { cwd: CLI_DIR, env });
+  const child = spawn(resolveBin("uv"), buildArgs(options), { cwd: CLI_DIR, env });
   jobs.set(jobId, child);
 
   let buffer = "";

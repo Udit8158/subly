@@ -11,6 +11,8 @@ __pycache__/
 desktop/node_modules/
 desktop/dist/
 desktop/dist-electron/
+desktop/release/
+desktop/build/icon-master.png
 desktop/test-results/
 desktop/playwright-report/
 .DS_Store

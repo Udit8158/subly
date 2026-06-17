@@ -15,7 +15,9 @@
     "test:node": "node tests/buildArgs.test.mjs && node tests/keychain.test.mjs && node tests/bridge.test.mjs",
     "test:e2e": "playwright test",
     "test:electron": "vite build && node tests/electron-smoke.mjs",
-    "test": "npm run typecheck && npm run test:node && npm run test:e2e"
+    "test": "npm run typecheck && npm run test:node && npm run test:e2e",
+    "icon": "node scripts/make-icon.mjs",
+    "dist": "vite build && electron-builder --mac"
   },
   "dependencies": {
     "@fontsource/inter": "^5.2.8",
@@ -32,8 +34,43 @@
     "concurrently": "^9.0.1",
     "cross-env": "^7.0.3",
     "electron": "^33.0.0",
+    "electron-builder": "^26.15.3",
     "typescript": "^5.6.3",
     "vite": "^5.4.8",
     "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "app.subly.desktop",
+    "productName": "Subly",
+    "directories": { "output": "release", "buildResources": "build" },
+    "asar": true,
+    "files": ["electron/**/*", "dist/**/*", "package.json"],
+    "extraResources": [
+      {
+        "from": "../cli",
+        "to": "cli",
+        "filter": [
+          "**/*",
+          "!.venv/**",
+          "!**/__pycache__/**",
+          "!**/*.pyc",
+          "!.env",
+          "!.pytest_cache/**",
+          "!tests/**",
+          "!**/*.srt",
+          "!**/*.wav",
+          "!**/*.subly/**"
+        ]
+      }
+    ],
+    "mac": {
+      "target": [
+        { "target": "dmg", "arch": ["arm64"] },
+        { "target": "zip", "arch": ["arm64"] }
+      ],
+      "category": "public.app-category.productivity",
+      "icon": "build/icon.icns",
+      "identity": null
+    }
   }
 }
