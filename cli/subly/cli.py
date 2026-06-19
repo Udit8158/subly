@@ -18,10 +18,12 @@ from dotenv import load_dotenv
 from rich.console import Console
 from rich.progress import (
     BarColumn,
+    DownloadColumn,
     Progress,
     TaskProgressColumn,
     TextColumn,
     TimeRemainingColumn,
+    TransferSpeedColumn,
 )
 
 from . import audio as audio_mod
@@ -103,6 +105,67 @@ def _fmt_dur(seconds: float) -> str:
     if m:
         return f"{m}m {s:02d}s"
     return f"{s}s"
+
+
+def _ensure_model(model: str) -> None:
+    """Download the Whisper model if it isn't cached yet, shown as a DISTINCT
+    download phase (its own progress bar, separate from transcribing) with the
+    on-disk location. No-op when the model is already present."""
+    if transcribe_mod.is_model_cached(model):
+        return
+    repo = transcribe_mod.model_repo(model)
+    location = transcribe_mod.cache_location()
+    events_mod.emitter.emit(
+        "model_download_start", kind="transcribe", model=model, repo=repo, location=location
+    )
+    t0 = time.perf_counter()
+    try:
+        if _json_mode():
+            last = [-1]
+
+            def cb(done: int, total: int) -> None:
+                pct = int(done / total * 100) if total else 0
+                if pct != last[0]:
+                    last[0] = pct
+                    events_mod.emitter.emit(
+                        "model_download_progress", kind="transcribe",
+                        completed_bytes=done, total_bytes=total, percent=pct,
+                    )
+
+            transcribe_mod.download_model(model, progress_cb=cb)
+        else:
+            _step(f"Downloading speech model [bold]{model}[/] (one-time, first run)")
+            console.print(f"  [dim]{repo} → {location}[/]")
+            with Progress(
+                TextColumn("  [cyan]· downloading[/]"),
+                BarColumn(bar_width=None),
+                DownloadColumn(),
+                TransferSpeedColumn(),
+                TimeRemainingColumn(compact=True),
+                console=console,
+                transient=True,
+            ) as prog:
+                task = prog.add_task("dl", total=None)
+
+                def cb(done: int, total: int) -> None:
+                    prog.update(task, completed=done, total=total or None)
+
+                transcribe_mod.download_model(model, progress_cb=cb)
+    except Exception as e:  # network / HF errors — fail cleanly, not with a traceback
+        msg = (
+            f"Couldn't download the speech model '{model}': {type(e).__name__}. "
+            "Check your internet connection and try again — the download resumes "
+            "where it left off."
+        )
+        _emit_error("model_download", msg, fatal=True)
+        if not _json_mode():
+            console.print(f"\n[red]Download failed.[/] {msg}")
+        raise typer.Exit(1)
+    events_mod.emitter.emit(
+        "model_download_done", kind="transcribe", location=location,
+        seconds=round(time.perf_counter() - t0, 1),
+    )
+    _done(f"speech model ready → {location}")
 
 
 def _load_model(model: str) -> None:
@@ -237,6 +300,7 @@ def _get_japanese(
             continue
 
         if not model_loaded:
+            _ensure_model(model)
             _load_model(model)
             model_loaded = True
         t0 = time.perf_counter()
@@ -378,10 +442,13 @@ def _run_pipeline(
                 "cached", index=i, scope="transcribe", lines=len(ja_local)
             )
         else:
-            events_mod.emitter.emit("stage_start", index=i, stage="transcribe")
             if not model_loaded:
+                # Download (with its own progress phase) before announcing the
+                # transcribe stage, so the UI shows "Downloading", not "Transcribing".
+                _ensure_model(whisper_model)
                 _load_model(whisper_model)
                 model_loaded = True
+            events_mod.emitter.emit("stage_start", index=i, stage="transcribe")
             t0 = time.perf_counter()
             transcribe_mod.reset_peak_memory()
             chunk_wav = chunks_dir / f"chunk_{i:03d}.wav"

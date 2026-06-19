@@ -93,6 +93,83 @@ def preload(model: str = "large-v3") -> None:
     ModelHolder.get_model(repo, mx.float16)  # matches transcribe()'s default dtype
 
 
+def model_repo(model: str) -> str:
+    """Hugging Face repo id for a friendly model name (or the name as-is)."""
+    return MODELS.get(model, model)
+
+
+def cache_location() -> str:
+    """Directory where downloaded Whisper models are stored (HF hub cache)."""
+    from huggingface_hub.constants import HF_HUB_CACHE
+
+    return HF_HUB_CACHE
+
+
+def is_model_cached(model: str) -> bool:
+    """True if the model's snapshot is already present in the local HF cache."""
+    from huggingface_hub import snapshot_download
+
+    _quiet_hf_logging()
+    try:
+        snapshot_download(model_repo(model), local_files_only=True)
+        return True
+    except Exception:
+        return False
+
+
+def _repo_total_bytes(repo: str) -> int:
+    """Best-effort total download size (bytes) for a repo, for an overall bar."""
+    try:
+        from huggingface_hub import HfApi
+
+        info = HfApi().repo_info(repo, files_metadata=True)
+        return sum(int(s.size or 0) for s in (info.siblings or []))
+    except Exception:
+        return 0
+
+
+def download_model(model: str, progress_cb: Callable[[int, int], None] | None = None) -> str:
+    """Download the model snapshot into the HF cache; return the cache location.
+
+    Progress is reported as cumulative (bytes_done, total_bytes) via `progress_cb`
+    using a custom tqdm class — the same hook huggingface_hub uses internally — so
+    both the CLI's rich bar and the JSON event stream can drive a real download
+    bar. No-op download if already cached.
+    """
+    from huggingface_hub import snapshot_download
+    from tqdm.auto import tqdm as _tqdm
+
+    _quiet_hf_logging()
+    repo = model_repo(model)
+    if progress_cb is None:
+        return snapshot_download(repo)
+
+    total = _repo_total_bytes(repo)
+    state = {"done": 0}
+
+    class _DLBar(_tqdm):
+        """Real tqdm subclass (keeps its lock/thread machinery) that renders
+        nothing and instead reports cumulative byte progress to progress_cb."""
+
+        def __init__(self, *args, **kwargs) -> None:
+            self._bytes = kwargs.get("unit") == "B"
+            kwargs["disable"] = True  # never draw to the console
+            super().__init__(*args, **kwargs)
+
+        def update(self, n: int = 1):
+            if self._bytes:
+                state["done"] += int(n or 0)
+                progress_cb(state["done"], total)
+            return super().update(n)
+
+    # Passing tqdm_class drives our subclass directly (even with the global
+    # progress-bar suppression set at import), so byte updates reach progress_cb.
+    snapshot_download(repo, tqdm_class=_DLBar)
+    if total:
+        progress_cb(total, total)
+    return cache_location()
+
+
 @contextlib.contextmanager
 def _patch_progress(progress_cb: Callable[[int, int], None] | None):
     """Forward MLX-Whisper's internal decode progress to `progress_cb`.

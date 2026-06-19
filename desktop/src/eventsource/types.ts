@@ -49,6 +49,29 @@ export interface StageStartEvent extends BaseEvent {
   stage: "transcribe" | "translate";
 }
 
+export interface ModelDownloadStartEvent extends BaseEvent {
+  type: "model_download_start";
+  kind: "transcribe"; // which model is downloading (speech model, for now)
+  model: string;
+  repo: string;
+  location: string; // on-disk cache directory
+}
+
+export interface ModelDownloadProgressEvent extends BaseEvent {
+  type: "model_download_progress";
+  kind: "transcribe";
+  completed_bytes: number;
+  total_bytes: number; // 0 if unknown
+  percent: number;
+}
+
+export interface ModelDownloadDoneEvent extends BaseEvent {
+  type: "model_download_done";
+  kind: "transcribe";
+  location: string;
+  seconds: number;
+}
+
 export interface TranscribeProgressEvent extends BaseEvent {
   type: "transcribe_progress";
   index: number;
@@ -119,6 +142,9 @@ export type SublyEvent =
   | PlanEvent
   | EstimateEvent
   | ChunkStartEvent
+  | ModelDownloadStartEvent
+  | ModelDownloadProgressEvent
+  | ModelDownloadDoneEvent
   | StageStartEvent
   | TranscribeProgressEvent
   | TranscribeDoneEvent
