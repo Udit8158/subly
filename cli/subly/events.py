@@ -24,6 +24,9 @@ Event types (payload fields beyond type/t):
   audio_ready       duration            (seconds, float)
   plan              total, chunks:[{index,start,end}]
   estimate          est_usd, est_seconds
+  model_download_start    kind("transcribe"), model, repo, location
+  model_download_progress kind, completed_bytes, total_bytes, percent
+  model_download_done     kind, location, seconds
   chunk_start       index, total, start, end, overall_pct, eta_seconds
   stage_start       index, stage("transcribe"|"translate")
   transcribe_progress index, done, total   (done/total = audio frames seeked)

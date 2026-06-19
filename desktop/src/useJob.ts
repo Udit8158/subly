@@ -49,6 +49,15 @@ export interface JobState {
   elapsedSeconds?: number;
   cachedResult?: boolean;
   error?: string;
+  // Set while a model is being downloaded (first run); cleared when done. Drives
+  // a distinct download bar, separate from the transcribe/translate progress.
+  download?: {
+    model: string;
+    location: string;
+    completedBytes: number;
+    totalBytes: number;
+    percent: number;
+  };
   events: SublyEvent[];
 }
 
@@ -107,6 +116,30 @@ export function reducer(state: JobState, action: Action): JobState {
         openaiModel: e.openai_model,
         notes: e.notes,
       };
+    case "model_download_start":
+      return {
+        ...s,
+        download: {
+          model: e.model,
+          location: e.location,
+          completedBytes: 0,
+          totalBytes: 0,
+          percent: 0,
+        },
+      };
+    case "model_download_progress":
+      return {
+        ...s,
+        download: {
+          model: s.download?.model ?? "",
+          location: s.download?.location ?? "",
+          completedBytes: e.completed_bytes,
+          totalBytes: e.total_bytes,
+          percent: e.percent,
+        },
+      };
+    case "model_download_done":
+      return { ...s, download: undefined };
     case "audio_ready":
       return { ...s, duration: e.duration };
     case "estimate":
